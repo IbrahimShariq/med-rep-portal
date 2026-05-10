@@ -1,0 +1,14 @@
+Starting project at C:\Users\Ibrahim\.gemini\antigravity\scratch\Med_Rep-main\Med_Rep-main
+Starting Metro Bundler
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+Waiting on http://localhost:8081
+Logs for your project will appear below.
+Android node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android node_modules\expo-router\entry.js ▓▓░░░░░░░░░░░░░░ 16.0% ( 63/243)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓░░░░░░░░░░ 38.7% (333/535)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓░░░░░░ 67.8% (694/845)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 70.0% (1021/1308)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 93.8% (1561/1631)
+Android Bundled 18972ms node_modules\expo-router\entry.js (1712 modules)
+ LOG  ✅ Database ready (v2 schema)
+ LOG  ✅ Database initialized and seeded successfully!

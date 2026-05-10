@@ -1,0 +1,76 @@
+{
+  "branding": {
+    "appName": "Med Rep",
+    "logoText": "MR",
+    "primaryColor": "#2563eb",
+    "logoUrl": ""
+  },
+  "settings": {
+    "attendance_radius_meters": "300",
+    "visit_proximity_warning_meters": "200",
+    "teleport_max_speed_kmh": "120",
+    "late_checkin_after_hour": "9",
+    "offline_sync_expiry_hours": "24"
+  },
+  "reps": [
+    {
+      "id": "1",
+      "name": "Zohaib",
+      "email": "zohaib@medrep.local",
+      "password": "123456",
+      "role": "REP",
+      "territory": "Blue Area",
+      "baseLatitude": 33.7104,
+      "baseLongitude": 73.0567,
+      "profilePicture": "",
+      "status": "ACTIVE",
+      "createdAt": "2026-05-11T00:00:00.000Z"
+    }
+  ],
+  "doctors": [
+    {
+      "id": "1",
+      "name": "Dr. Ahmad Khan",
+      "degree": "MBBS, FCPS",
+      "specialization": "Cardiologist",
+      "priority": 1,
+      "territory": "Blue Area",
+      "latitude": 33.7104,
+      "longitude": 73.0567,
+      "phone": "0300-1234567",
+      "notes": "Morning visits preferred",
+      "is_active": 1,
+      "created_at": "2026-05-11T00:00:00.000Z"
+    },
+    {
+      "id": "2",
+      "name": "Dr. Sara Ali",
+      "degree": "MBBS, DDerm",
+      "specialization": "Dermatologist",
+      "priority": 2,
+      "territory": "F-10 Markaz",
+      "latitude": 33.6934,
+      "longitude": 73.0126,
+      "phone": "0321-7654321",
+      "notes": "Clinic is on main markaz road",
+      "is_active": 1,
+      "created_at": "2026-05-11T00:00:00.000Z"
+    },
+    {
+      "id": "3",
+      "name": "Dr. Usman Sheikh",
+      "degree": "MBBS",
+      "specialization": "General Physician",
+      "priority": 1,
+      "territory": "DHA Phase 2",
+      "latitude": 33.5244,
+      "longitude": 73.1511,
+      "phone": "0333-1112223",
+      "notes": "High prescription potential",
+      "is_active": 1,
+      "created_at": "2026-05-11T00:00:00.000Z"
+    }
+  ],
+  "attendance": [],
+  "visits": []
+}
