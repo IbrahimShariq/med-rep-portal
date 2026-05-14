@@ -9,7 +9,7 @@
     "attendance_radius_meters": "300",
     "visit_proximity_warning_meters": "200",
     "teleport_max_speed_kmh": "120",
-    "late_checkin_after_hour": "9",
+    "late_checkin_after_hour": "10",
     "offline_sync_expiry_hours": "24"
   },
   "reps": [
@@ -20,6 +20,7 @@
       "password": "123456",
       "role": "REP",
       "territory": "Blue Area",
+      "managerId": "",
       "baseLatitude": 33.7104,
       "baseLongitude": 73.0567,
       "profilePicture": "",
@@ -35,6 +36,7 @@
       "specialization": "Cardiologist",
       "priority": 1,
       "territory": "Blue Area",
+      "address": "Blue Area, Islamabad",
       "latitude": 33.7104,
       "longitude": 73.0567,
       "phone": "0300-1234567",
@@ -49,6 +51,7 @@
       "specialization": "Dermatologist",
       "priority": 2,
       "territory": "F-10 Markaz",
+      "address": "F-10 Markaz, Islamabad",
       "latitude": 33.6934,
       "longitude": 73.0126,
       "phone": "0321-7654321",
@@ -63,6 +66,7 @@
       "specialization": "General Physician",
       "priority": 1,
       "territory": "DHA Phase 2",
+      "address": "DHA Phase 2, Islamabad",
       "latitude": 33.5244,
       "longitude": 73.1511,
       "phone": "0333-1112223",
@@ -72,5 +76,6 @@
     }
   ],
   "attendance": [],
-  "visits": []
+  "visits": [],
+  "schedules": []
 }

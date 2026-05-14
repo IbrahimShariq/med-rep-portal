@@ -140,6 +140,7 @@ h2 {
 .icon-button,
 .primary-button,
 .secondary-button,
+.file-button,
 .ghost-button,
 .secondary-link {
   min-height: 40px;
@@ -167,10 +168,22 @@ h2 {
 }
 
 .secondary-button,
-.secondary-link {
+.secondary-link,
+.file-button {
   background: #eef4ff;
   color: #194185;
   padding: 0 14px;
+}
+
+.file-button {
+  min-height: 40px;
+  text-transform: none;
+  font-size: 14px;
+  border-radius: 8px;
+}
+
+.file-button input {
+  display: none;
 }
 
 .ghost-button {
@@ -260,6 +273,40 @@ h2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+}
+
+.report-controls {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.calendar-day,
+.empty-calendar {
+  border: 1px solid #e7ecf3;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.calendar-day {
+  display: grid;
+  gap: 4px;
+}
+
+.calendar-day svg {
+  color: var(--brand);
+}
+
+.calendar-day span,
+.empty-calendar {
+  color: #667085;
+  font-size: 13px;
 }
 
 label {
@@ -474,6 +521,7 @@ td {
   }
 
   .metric-grid,
+  .report-controls,
   .two-column,
   .form-grid {
     grid-template-columns: 1fr;
