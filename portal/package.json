@@ -7,7 +7,7 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "start": "npm run build && node server/index.js",
+    "start": "node server/index.js",
     "api": "node server/index.js",
     "dev": "vite",
     "build": "tsc -b && vite build",
