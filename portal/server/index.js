@@ -108,7 +108,18 @@ const readBody = (req) =>
     req.on('error', reject);
   });
 
-const loadData = async () => JSON.parse(await readFile(DATA_FILE, 'utf8'));
+const normalizeData = (data) => ({
+  branding: data.branding || { appName: 'Med Rep', logoText: 'MR', primaryColor: '#2563eb', logoUrl: '' },
+  settings: data.settings || {},
+  reps: data.reps || [],
+  doctors: data.doctors || [],
+  attendance: data.attendance || [],
+  visits: data.visits || [],
+  schedules: data.schedules || [],
+  leaves: data.leaves || [],
+});
+
+const loadData = async () => normalizeData(JSON.parse(await readFile(DATA_FILE, 'utf8')));
 const saveData = async (data) => writeFile(DATA_FILE, `${JSON.stringify(data, null, 2)}\n`);
 
 const send = (req, res, status, payload) => {
@@ -161,6 +172,22 @@ const cleanSchedule = (input, data) => {
     status: approvalChain.length ? 'PENDING' : 'APPROVED',
     approval_chain: approvalChain,
     approvals: input.approvals || [],
+    syncedAt: new Date().toISOString(),
+  };
+};
+
+const cleanLeave = (input, data) => {
+  const repId = String(input.rep_id || input.repId || '').trim();
+  const rep = data.reps.find((item) => String(item.id) === repId);
+  return {
+    id: input.id == null ? nextId(data.leaves || []) : String(input.id),
+    rep_id: repId,
+    date: String(input.date || new Date().toISOString()).slice(0, 10),
+    leave_type: String(input.leave_type || input.leaveType || 'Leave').trim(),
+    reason: String(input.reason || '').trim(),
+    status: String(input.status || 'PENDING').trim(),
+    manager_id: String(input.manager_id || input.managerId || rep?.managerId || '').trim(),
+    created_at: input.created_at || input.createdAt || new Date().toISOString(),
     syncedAt: new Date().toISOString(),
   };
 };
@@ -238,6 +265,7 @@ const routes = {
     ...data,
     reps: data.reps.map(stripSensitiveRep),
     schedules: data.schedules || [],
+    leaves: data.leaves || [],
   }),
   'PUT /api/branding': async (data, body) => {
     data.branding = { ...data.branding, ...body };
@@ -342,6 +370,38 @@ const handleDynamicRoute = async (req, res, data, pathname, body) => {
     return send(req, res, 200, schedules[index]);
   }
 
+  const leaveApproveMatch = pathname.match(/^\/api\/leaves\/([^/]+)\/approve$/);
+  if (leaveApproveMatch && req.method === 'POST') {
+    const leaves = data.leaves || [];
+    const index = leaves.findIndex((item) => String(item.id) === leaveApproveMatch[1]);
+    if (index < 0) return send(req, res, 404, { error: 'Leave request not found' });
+    leaves[index] = {
+      ...leaves[index],
+      status: 'APPROVED',
+      manager_id: String(body.managerId || leaves[index].manager_id || ''),
+      approvedAt: new Date().toISOString(),
+    };
+    data.leaves = leaves;
+    await saveData(data);
+    return send(req, res, 200, leaves[index]);
+  }
+
+  const leaveRejectMatch = pathname.match(/^\/api\/leaves\/([^/]+)\/reject$/);
+  if (leaveRejectMatch && req.method === 'POST') {
+    const leaves = data.leaves || [];
+    const index = leaves.findIndex((item) => String(item.id) === leaveRejectMatch[1]);
+    if (index < 0) return send(req, res, 404, { error: 'Leave request not found' });
+    leaves[index] = {
+      ...leaves[index],
+      status: 'REJECTED',
+      manager_id: String(body.managerId || leaves[index].manager_id || ''),
+      rejectedAt: new Date().toISOString(),
+    };
+    data.leaves = leaves;
+    await saveData(data);
+    return send(req, res, 200, leaves[index]);
+  }
+
   return false;
 };
 
@@ -374,6 +434,7 @@ const server = http.createServer(async (req, res) => {
         doctors: data.doctors.filter((doctor) => doctor.is_active !== 0),
         reps: data.reps.filter((item) => item.status !== 'INACTIVE').map(stripSensitiveRep),
         schedules: (data.schedules || []).filter((schedule) => String(schedule.rep_id) === String(repId)),
+        leaves: (data.leaves || []).filter((leave) => String(leave.rep_id) === String(repId)),
         currentRep: rep ? stripSensitiveRep(rep) : null,
       });
     }
@@ -385,6 +446,20 @@ const server = http.createServer(async (req, res) => {
       }
       upsertRows(data.attendance, body.attendance, (row) => `${row.rep_id || row.repId}:${row.date}:${row.id}`);
       upsertRows(data.visits, body.visits, (row) => `${row.rep_id || row.repId}:${row.id}`);
+      for (const row of body.doctors || []) {
+        const existingIndex = data.doctors.findIndex(
+          (item) => String(item.id) === String(row.portal_id || row.id),
+        );
+        const doctor = {
+          id: existingIndex >= 0 ? data.doctors[existingIndex].id : nextId(data.doctors),
+          ...cleanDoctor(row),
+          created_at: row.created_at || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        if (!doctor.name) continue;
+        if (existingIndex >= 0) data.doctors[existingIndex] = { ...data.doctors[existingIndex], ...doctor };
+        else data.doctors.push(doctor);
+      }
       data.schedules = data.schedules || [];
       for (const row of body.schedules || []) {
         const schedule = cleanSchedule(row, data);
@@ -394,12 +469,23 @@ const server = http.createServer(async (req, res) => {
         if (index >= 0) data.schedules[index] = { ...data.schedules[index], ...schedule };
         else data.schedules.push(schedule);
       }
+      data.leaves = data.leaves || [];
+      for (const row of body.leaves || []) {
+        const leave = cleanLeave(row, data);
+        const index = data.leaves.findIndex(
+          (item) => String(item.id) === String(leave.id) && String(item.rep_id) === String(leave.rep_id),
+        );
+        if (index >= 0) data.leaves[index] = { ...data.leaves[index], ...leave };
+        else data.leaves.push(leave);
+      }
       await saveData(data);
       return send(req, res, 200, {
         success: true,
         attendance: data.attendance.length,
         visits: data.visits.length,
         schedules: data.schedules.length,
+        doctors: data.doctors.length,
+        leaves: data.leaves.length,
       });
     }
 

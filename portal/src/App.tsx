@@ -70,6 +70,10 @@ type Attendance = {
   status?: string;
   exception_reason?: string;
   distance_from_base_m?: number;
+  check_in_latitude?: number;
+  check_in_longitude?: number;
+  check_out_latitude?: number;
+  check_out_longitude?: number;
 };
 
 type Visit = {
@@ -82,6 +86,9 @@ type Visit = {
   notes?: string;
   joint_with_rep_ids?: string[];
   joint_visit?: number;
+  latitude?: number;
+  longitude?: number;
+  photo_uri?: string;
 };
 
 type Schedule = {
@@ -105,6 +112,22 @@ type AppState = {
   attendance: Attendance[];
   visits: Visit[];
   schedules: Schedule[];
+  leaves: LeaveRequest[];
+};
+
+type LeaveRequest = {
+  id: string | number;
+  rep_id?: string;
+  repId?: string;
+  date: string;
+  leave_type?: string;
+  leaveType?: string;
+  reason?: string;
+  status?: string;
+  manager_id?: string;
+  managerId?: string;
+  approvedAt?: string;
+  rejectedAt?: string;
 };
 
 type Tab = 'dashboard' | 'doctors' | 'sales' | 'attendance' | 'branding' | 'settings';
@@ -177,6 +200,16 @@ function dateOnly(value?: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
   return date.toISOString().slice(0, 10);
+}
+
+function googleMapsLink(latitude?: number | null, longitude?: number | null) {
+  if (latitude == null || longitude == null) return '';
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${latitude},${longitude}`)}`;
+}
+
+function googleMapsEmbed(latitude?: number | null, longitude?: number | null) {
+  if (latitude == null || longitude == null) return '';
+  return `https://maps.google.com/maps?q=${encodeURIComponent(`${latitude},${longitude}`)}&z=16&output=embed`;
 }
 
 async function downloadWorkbook(filename: string, sheets: Record<string, Record<string, unknown>[]>) {
@@ -347,6 +380,29 @@ export default function App() {
     return [...map.entries()].sort(([a], [b]) => b.localeCompare(a));
   }, [filteredAttendance, filteredVisits]);
 
+  const reportMapLocation = useMemo(() => {
+    const attendanceLocation = filteredAttendance.find(
+      (record) => record.check_in_latitude != null && record.check_in_longitude != null,
+    );
+    if (attendanceLocation) {
+      return {
+        label: `${repsById.get(String(attendanceLocation.rep_id || attendanceLocation.repId || ''))?.name || 'Attendance'} check-in`,
+        latitude: attendanceLocation.check_in_latitude,
+        longitude: attendanceLocation.check_in_longitude,
+      };
+    }
+    const visitLocation = filteredVisits.find((visit) => visit.latitude != null && visit.longitude != null);
+    if (visitLocation) {
+      const doctor = state?.doctors.find((item) => String(item.id) === String(visitLocation.doctor_id));
+      return {
+        label: `${doctor?.name || 'Visit'} location`,
+        latitude: visitLocation.latitude,
+        longitude: visitLocation.longitude,
+      };
+    }
+    return null;
+  }, [filteredAttendance, filteredVisits, repsById, state?.doctors]);
+
   const saveBranding = async () => {
     if (!state) return;
     const branding = await api<Branding>('/branding', {
@@ -462,6 +518,15 @@ export default function App() {
     await loadState();
   };
 
+  const updateLeaveStatus = async (leaveId: string | number, action: 'approve' | 'reject') => {
+    const managerId = state?.reps.find((rep) => rep.role === 'MANAGER' || rep.managerId === '')?.id || '';
+    await api<LeaveRequest>(`/leaves/${leaveId}/${action}`, {
+      method: 'POST',
+      body: JSON.stringify({ managerId }),
+    });
+    await loadState();
+  };
+
   const applyMapPaste = () => {
     const coords = parseGoogleMapUrl(mapPaste);
     if (!coords) {
@@ -522,6 +587,11 @@ export default function App() {
           'Check Out': formatTime(record.check_out_time),
           Status: record.status || 'VALID',
           'Distance From Base (m)': record.distance_from_base_m ?? 0,
+          'Check In Latitude': record.check_in_latitude ?? '',
+          'Check In Longitude': record.check_in_longitude ?? '',
+          'Check Out Latitude': record.check_out_latitude ?? '',
+          'Check Out Longitude': record.check_out_longitude ?? '',
+          'Google Map': googleMapsLink(record.check_in_latitude, record.check_in_longitude),
           Reason: record.exception_reason || '',
         };
       }),
@@ -537,6 +607,9 @@ export default function App() {
           'Check In': formatTime(visit.check_in_time),
           'Check Out': formatTime(visit.check_out_time),
           Flag: visit.flag_status || 'VALID',
+          Latitude: visit.latitude ?? '',
+          Longitude: visit.longitude ?? '',
+          'Google Map': googleMapsLink(visit.latitude, visit.longitude),
           'Joint Visit': visit.joint_visit ? 'Yes' : 'No',
           'Joint With': jointRepIds(visit.joint_with_rep_ids).map((id) => repsById.get(String(id))?.name || id).join(', '),
           Notes: visit.notes || '',
@@ -778,6 +851,22 @@ export default function App() {
                 ))}
               </div>
             </div>
+            {reportMapLocation ? (
+              <div className="panel">
+                <div className="panel-header">
+                  <h2>Exact Location Map</h2>
+                  <a className="link-button" href={googleMapsLink(reportMapLocation.latitude, reportMapLocation.longitude)} target="_blank" rel="noreferrer">
+                    <MapPin size={15} /> Open in Google Maps
+                  </a>
+                </div>
+                <iframe
+                  className="report-map"
+                  title={reportMapLocation.label}
+                  src={googleMapsEmbed(reportMapLocation.latitude, reportMapLocation.longitude)}
+                  loading="lazy"
+                />
+              </div>
+            ) : null}
             <div className="panel">
               <div className="panel-header">
                 <h2>Attendance Sync Log</h2>
@@ -788,13 +877,14 @@ export default function App() {
             <div className="panel">
               <div className="panel-header"><h2>Visit Reports</h2><span>{filteredVisits.length} synced</span></div>
               <table>
-                <thead><tr><th>Sales Person</th><th>Doctor</th><th>Check In</th><th>Check Out</th><th>Flag</th><th>Joint Visit</th><th>Notes</th></tr></thead>
+                <thead><tr><th>Sales Person</th><th>Doctor</th><th>Check In</th><th>Check Out</th><th>Flag</th><th>Location</th><th>Photo</th><th>Joint Visit</th><th>Notes</th></tr></thead>
                 <tbody>
                   {filteredVisits.map((visit) => {
                     const repName = repsById.get(String(visit.rep_id || ''))?.name || visit.rep_id || '-';
                     const doctor = state.doctors.find((item) => String(item.id) === String(visit.doctor_id));
                     const jointNames = jointRepIds(visit.joint_with_rep_ids).map((id) => repsById.get(String(id))?.name || id).join(', ');
-                    return <tr key={`${visit.rep_id}-${visit.id}`}><td>{repName}</td><td>{doctor?.name || visit.doctor_id || '-'}</td><td>{formatTime(visit.check_in_time)}</td><td>{formatTime(visit.check_out_time)}</td><td>{visit.flag_status || 'VALID'}</td><td>{visit.joint_visit ? `Yes (${jointNames})` : '-'}</td><td>{visit.notes || '-'}</td></tr>;
+                    const mapHref = googleMapsLink(visit.latitude, visit.longitude);
+                    return <tr key={`${visit.rep_id}-${visit.id}`}><td>{repName}</td><td>{doctor?.name || visit.doctor_id || '-'}</td><td>{formatTime(visit.check_in_time)}</td><td>{formatTime(visit.check_out_time)}</td><td>{visit.flag_status || 'VALID'}</td><td>{mapHref ? <a href={mapHref} target="_blank" rel="noreferrer">Map</a> : '-'}</td><td>{visit.photo_uri ? 'Local only' : '-'}</td><td>{visit.joint_visit ? `Yes (${jointNames})` : '-'}</td><td>{visit.notes || '-'}</td></tr>;
                   })}
                 </tbody>
               </table>
@@ -802,7 +892,7 @@ export default function App() {
             <div className="panel">
               <div className="panel-header"><h2>Schedule Approvals</h2><span>{(state.schedules || []).length} schedules</span></div>
               <table>
-                <thead><tr><th>Sales Person</th><th>Doctor</th><th>Date</th><th>Status</th><th>Approval Chain</th></tr></thead>
+                <thead><tr><th>Sales Person</th><th>Doctor</th><th>Date</th><th>Status</th><th>Approval Chain</th><th>Actions</th></tr></thead>
                 <tbody>
                   {(state.schedules || []).map((schedule) => {
                     const repId = String(schedule.rep_id || schedule.repId || '');
@@ -815,6 +905,38 @@ export default function App() {
                         <td>{schedule.date}</td>
                         <td><span className={`pill ${schedule.status || 'PENDING'}`}>{schedule.status || 'PENDING'}</span></td>
                         <td>{(schedule.approval_chain || []).map((id) => `${repsById.get(id)?.name || id}${approved.has(id) ? ' approved' : ' pending'}`).join(' > ') || '-'}</td>
+                        <td>-</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="panel">
+              <div className="panel-header"><h2>Leave Requests</h2><span>{(state.leaves || []).length} requests</span></div>
+              <table>
+                <thead><tr><th>Sales Person</th><th>Date</th><th>Type</th><th>Reason</th><th>Status</th><th>Actions</th></tr></thead>
+                <tbody>
+                  {(state.leaves || []).length === 0 ? (
+                    <tr><td colSpan={6}>No leave requests yet.</td></tr>
+                  ) : (state.leaves || []).map((leave) => {
+                    const repId = String(leave.rep_id || leave.repId || '');
+                    const status = leave.status || 'PENDING';
+                    return (
+                      <tr key={`${repId}-${leave.date}-${leave.id}`}>
+                        <td>{repsById.get(repId)?.name || repId}</td>
+                        <td>{leave.date}</td>
+                        <td>{leave.leave_type || leave.leaveType || 'Leave'}</td>
+                        <td>{leave.reason || '-'}</td>
+                        <td><span className={`pill ${status}`}>{status}</span></td>
+                        <td className="table-actions">
+                          {status === 'PENDING' ? (
+                            <>
+                              <button onClick={() => updateLeaveStatus(leave.id, 'approve')}>Approve</button>
+                              <button onClick={() => updateLeaveStatus(leave.id, 'reject')}>Reject</button>
+                            </>
+                          ) : '-'}
+                        </td>
                       </tr>
                     );
                   })}
@@ -860,12 +982,14 @@ export default function App() {
 function AttendanceTable({ attendance, repsById }: { attendance: Attendance[]; repsById: Map<string, Rep> }) {
   return (
     <table>
-      <thead><tr><th>Sales Person</th><th>Date</th><th>Check In</th><th>Check Out</th><th>Status</th><th>Distance</th><th>Reason</th></tr></thead>
+      <thead><tr><th>Sales Person</th><th>Date</th><th>Check In</th><th>Check Out</th><th>Status</th><th>Check-In Map</th><th>Check-Out Map</th><th>Reason</th></tr></thead>
       <tbody>
         {attendance.length === 0 ? (
-          <tr><td colSpan={7}>No attendance synced yet.</td></tr>
+          <tr><td colSpan={8}>No attendance synced yet.</td></tr>
         ) : attendance.map((record) => {
           const repId = String(record.rep_id || record.repId || '');
+          const checkInMap = googleMapsLink(record.check_in_latitude, record.check_in_longitude);
+          const checkOutMap = googleMapsLink(record.check_out_latitude, record.check_out_longitude);
           return (
             <tr key={`${repId}-${record.date}-${record.id}`}>
               <td>{repsById.get(repId)?.name || repId || '-'}</td>
@@ -873,7 +997,8 @@ function AttendanceTable({ attendance, repsById }: { attendance: Attendance[]; r
               <td>{formatTime(record.check_in_time)}</td>
               <td>{formatTime(record.check_out_time)}</td>
               <td><span className={`pill ${record.status || 'VALID'}`}>{record.status || 'VALID'}</span></td>
-              <td>{record.distance_from_base_m ?? 0} m</td>
+              <td>{checkInMap ? <a href={checkInMap} target="_blank" rel="noreferrer">Open Map</a> : '-'}</td>
+              <td>{checkOutMap ? <a href={checkOutMap} target="_blank" rel="noreferrer">Open Map</a> : '-'}</td>
               <td>{record.exception_reason || '-'}</td>
             </tr>
           );

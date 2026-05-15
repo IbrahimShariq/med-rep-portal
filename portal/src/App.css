@@ -453,6 +453,21 @@ td {
   color: #936400;
 }
 
+.pill.PENDING {
+  background: #fff4cc;
+  color: #936400;
+}
+
+.pill.APPROVED {
+  background: #e7f8ef;
+  color: #067647;
+}
+
+.pill.REJECTED {
+  background: #fee4e2;
+  color: #b42318;
+}
+
 .pill.OUT_OF_BOUNDS,
 .pill.LOCATION_MISMATCH,
 .pill.UNREALISTIC_JUMP {
@@ -465,6 +480,38 @@ td {
   display: grid;
   place-items: center;
   color: #667085;
+}
+
+.link-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--brand);
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.report-map {
+  width: 100%;
+  min-height: 320px;
+  border: 0;
+  border-radius: 8px;
+}
+
+.table-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.table-actions button {
+  border: 1px solid #d0d5dd;
+  background: #ffffff;
+  color: #344054;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-weight: 700;
 }
 
 .spin {
