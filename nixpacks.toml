@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ["nodejs_22"]
+
+[phases.install]
+cmds = ["npm --prefix portal ci"]
+
+[phases.build]
+cmds = ["npm --prefix portal run build"]
+
+[start]
+cmd = "npm --prefix portal start"
