@@ -77,5 +77,6 @@
   ],
   "attendance": [],
   "visits": [],
-  "schedules": []
+  "schedules": [],
+  "leaves": []
 }
