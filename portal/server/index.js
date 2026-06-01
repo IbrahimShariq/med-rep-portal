@@ -87,12 +87,57 @@ const optionsHeaders = (req) => ({
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 });
 
+const normalizeProductIds = (value) => {
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+    } catch {
+      return value.split(',').map((item) => item.trim()).filter(Boolean);
+    }
+  }
+  return [];
+};
+
+const normalizeProductNames = (value) => {
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+    } catch {
+      return value.split(',').map((item) => item.trim()).filter(Boolean);
+    }
+  }
+  return [];
+};
+
+const normalizeUpload = (value) => {
+  const uri = String(value || '').trim();
+  if (!uri) return '';
+  const isSupported =
+    uri.startsWith('data:image/jpeg;base64,') ||
+    uri.startsWith('data:image/png;base64,') ||
+    uri.startsWith('data:image/webp;base64,') ||
+    /^https?:\/\//.test(uri);
+  if (!isSupported) return '';
+  const approxBytes = uri.startsWith('data:') ? Math.ceil((uri.length - uri.indexOf(',') - 1) * 0.75) : 0;
+  if (approxBytes > 5 * 1024 * 1024) return '';
+  return uri;
+};
+
+const inferCheckInType = (record) => {
+  const hour = new Date(record.check_in_time || record.created_at || Date.now()).getHours();
+  return hour >= 15 ? 'EVENING' : 'MORNING';
+};
+
 const readBody = (req) =>
   new Promise((resolve, reject) => {
     let body = '';
     req.on('data', (chunk) => {
       body += chunk;
-      if (body.length > 1_000_000) {
+      if (body.length > 8_000_000) {
         req.destroy();
         reject(Object.assign(new Error('Request body too large'), { statusCode: 413 }));
       }
@@ -108,16 +153,78 @@ const readBody = (req) =>
     req.on('error', reject);
   });
 
-const normalizeData = (data) => ({
-  branding: data.branding || { appName: 'Med Rep', logoText: 'MR', primaryColor: '#2563eb', logoUrl: '' },
-  settings: data.settings || {},
-  reps: data.reps || [],
-  doctors: data.doctors || [],
-  attendance: data.attendance || [],
-  visits: data.visits || [],
-  schedules: data.schedules || [],
-  leaves: data.leaves || [],
-});
+const normalizeArray = (value, fallback = []) => (Array.isArray(value) ? value : fallback);
+
+const defaultProducts = [
+  { id: '1', name: 'Panadol', description: 'Paracetamol for pain relief', status: 'ACTIVE' },
+  { id: '2', name: 'Amoxicillin', description: 'Antibiotic for bacterial infections', status: 'ACTIVE' },
+  { id: '3', name: 'Loratadine', description: 'Antihistamine for allergies', status: 'ACTIVE' },
+  { id: '4', name: 'Metformin', description: 'For blood sugar management', status: 'ACTIVE' },
+];
+
+const normalizeData = (raw) => {
+  const data = {
+    branding: raw.branding || { appName: 'Med Rep', logoText: 'MR', primaryColor: '#2563eb', logoUrl: '' },
+    settings: {
+      ...(raw.settings || {}),
+    },
+    reps: normalizeArray(raw.reps),
+    doctors: normalizeArray(raw.doctors),
+    attendance: normalizeArray(raw.attendance),
+    visits: normalizeArray(raw.visits),
+    schedules: normalizeArray(raw.schedules),
+    leaves: normalizeArray(raw.leaves),
+    products: normalizeArray(raw.products, defaultProducts),
+    expenses: normalizeArray(raw.expenses),
+    doctorLocationRequests: normalizeArray(raw.doctorLocationRequests),
+    specializations: normalizeArray(raw.specializations, ['Cardiologist', 'Dermatologist', 'General Physician', 'Pediatrician']),
+    degrees: normalizeArray(raw.degrees, ['MBBS', 'FCPS', 'DDerm', 'MD']),
+  };
+  const firstRepId = data.reps.find((rep) => rep.status !== 'INACTIVE')?.id || '';
+  data.reps = data.reps.map((rep) => ({
+    ...rep,
+    requireAttendancePhoto: rep.requireAttendancePhoto === true || rep.requireAttendancePhoto === 'true',
+  }));
+  data.doctors = data.doctors.map((doctor) => {
+    const approvedLatitude = doctor.approvedLatitude ?? doctor.approved_latitude ?? doctor.latitude ?? null;
+    const approvedLongitude = doctor.approvedLongitude ?? doctor.approved_longitude ?? doctor.longitude ?? null;
+    return {
+      ...doctor,
+      assignedRepId: doctor.assignedRepId || doctor.assigned_rep_id || firstRepId,
+      additionalDegree: doctor.additionalDegree || doctor.additional_degree || '',
+      productIds: normalizeProductIds(doctor.productIds || doctor.product_ids),
+      approvedLatitude,
+      approvedLongitude,
+      latitude: approvedLatitude,
+      longitude: approvedLongitude,
+      pendingLatitude: doctor.pendingLatitude ?? doctor.pending_latitude ?? null,
+      pendingLongitude: doctor.pendingLongitude ?? doctor.pending_longitude ?? null,
+      locationApprovalStatus: doctor.locationApprovalStatus || doctor.location_approval_status || (approvedLatitude != null && approvedLongitude != null ? 'APPROVED' : 'PENDING'),
+      photoUri: doctor.photoUri || doctor.photo_uri || '',
+    };
+  });
+  data.attendance = data.attendance.map((record) => ({
+    ...record,
+    check_in_type: record.check_in_type || record.checkInType || inferCheckInType(record),
+    photo_uri: record.photo_uri || record.photoUri || '',
+  }));
+  data.visits = data.visits.map((visit) => ({
+    ...visit,
+    product_ids: normalizeProductIds(visit.product_ids || visit.productIds),
+    product_names: normalizeProductNames(visit.product_names || visit.productNames),
+    photo_uri: visit.photo_uri || visit.photoUri || '',
+  }));
+  data.expenses = data.expenses.map((expense) => ({
+    ...expense,
+    status: expense.status || 'SUBMITTED',
+    attachment_uri: expense.attachment_uri || expense.attachmentUri || '',
+  }));
+  delete data.settings.max_upload_size_mb;
+  delete data.settings.supported_upload_formats;
+  delete data.settings.require_attendance_photo;
+  delete data.settings.attendance_radius_meters;
+  return data;
+};
 
 const loadData = async () => normalizeData(JSON.parse(await readFile(DATA_FILE, 'utf8')));
 const saveData = async (data) => writeFile(DATA_FILE, `${JSON.stringify(data, null, 2)}\n`);
@@ -132,19 +239,59 @@ const nextId = (items) => {
   return String(max + 1);
 };
 
-const cleanDoctor = (input) => ({
-  name: String(input.name || '').trim(),
-  degree: String(input.degree || '').trim(),
-  specialization: String(input.specialization || '').trim(),
-  priority: Number(input.priority || 2),
-  territory: String(input.territory || '').trim(),
-  address: String(input.address || '').trim(),
-  latitude: input.latitude === '' || input.latitude == null ? null : Number(input.latitude),
-  longitude: input.longitude === '' || input.longitude == null ? null : Number(input.longitude),
-  phone: String(input.phone || '').trim(),
-  notes: String(input.notes || '').trim(),
-  is_active: input.is_active ?? 1,
-});
+const addLocationRequestIfPending = (data, doctor, requestedBy = '') => {
+  if (doctor.pendingLatitude == null || doctor.pendingLongitude == null || doctor.locationApprovalStatus !== 'PENDING') return;
+  const exists = (data.doctorLocationRequests || []).some(
+    (request) =>
+      String(request.doctorId) === String(doctor.id) &&
+      request.status === 'PENDING' &&
+      Number(request.latitude) === Number(doctor.pendingLatitude) &&
+      Number(request.longitude) === Number(doctor.pendingLongitude),
+  );
+  if (exists) return;
+  data.doctorLocationRequests = data.doctorLocationRequests || [];
+  data.doctorLocationRequests.push({
+    id: nextId(data.doctorLocationRequests),
+    doctorId: String(doctor.id),
+    doctorName: doctor.name,
+    repId: String(requestedBy || doctor.assignedRepId || ''),
+    latitude: Number(doctor.pendingLatitude),
+    longitude: Number(doctor.pendingLongitude),
+    status: 'PENDING',
+    requestedAt: new Date().toISOString(),
+  });
+};
+
+const numberOrNull = (value) => (value === '' || value == null ? null : Number(value));
+
+const cleanDoctor = (input, existing = {}) => {
+  const latitude = numberOrNull(input.latitude ?? input.approvedLatitude ?? input.pendingLatitude ?? input.pending_latitude);
+  const longitude = numberOrNull(input.longitude ?? input.approvedLongitude ?? input.pendingLongitude ?? input.pending_longitude);
+  const hasNewLocation = latitude != null && longitude != null
+    && (latitude !== existing.approvedLatitude || longitude !== existing.approvedLongitude);
+  return {
+    name: String(input.name || '').trim(),
+    degree: String(input.degree || '').trim(),
+    additionalDegree: String(input.additionalDegree || input.additional_degree || '').trim(),
+    specialization: String(input.specialization || '').trim(),
+    priority: Number(input.priority || 2),
+    territory: String(input.territory || '').trim(),
+    address: String(input.address || '').trim(),
+    assignedRepId: String(input.assignedRepId || input.assigned_rep_id || existing.assignedRepId || '').trim(),
+    approvedLatitude: hasNewLocation ? existing.approvedLatitude ?? null : latitude,
+    approvedLongitude: hasNewLocation ? existing.approvedLongitude ?? null : longitude,
+    latitude: hasNewLocation ? existing.approvedLatitude ?? null : latitude,
+    longitude: hasNewLocation ? existing.approvedLongitude ?? null : longitude,
+    pendingLatitude: hasNewLocation ? latitude : numberOrNull(input.pendingLatitude ?? existing.pendingLatitude),
+    pendingLongitude: hasNewLocation ? longitude : numberOrNull(input.pendingLongitude ?? existing.pendingLongitude),
+    locationApprovalStatus: hasNewLocation ? 'PENDING' : (input.locationApprovalStatus || existing.locationApprovalStatus || (latitude != null && longitude != null ? 'APPROVED' : 'PENDING')),
+    phone: String(input.phone || '').trim(),
+    notes: String(input.notes || '').trim(),
+    productIds: normalizeProductIds(input.productIds || input.product_ids),
+    photoUri: normalizeUpload(input.photoUri || input.photo_uri),
+    is_active: input.is_active ?? 1,
+  };
+};
 
 const cleanRep = (input) => ({
   name: String(input.name || '').trim(),
@@ -156,8 +303,31 @@ const cleanRep = (input) => ({
   baseLatitude: input.baseLatitude === '' || input.baseLatitude == null ? null : Number(input.baseLatitude),
   baseLongitude: input.baseLongitude === '' || input.baseLongitude == null ? null : Number(input.baseLongitude),
   profilePicture: String(input.profilePicture || '').trim(),
+  requireAttendancePhoto: input.requireAttendancePhoto === true || input.requireAttendancePhoto === 'true',
   status: input.status || 'ACTIVE',
 });
+
+const cleanProduct = (input) => ({
+  name: String(input.name || '').trim(),
+  description: String(input.description || '').trim(),
+  status: input.status || 'ACTIVE',
+});
+
+const cleanExpense = (input, data) => {
+  const repId = String(input.rep_id || input.repId || '').trim();
+  return {
+    id: input.id == null ? nextId(data.expenses || []) : String(input.id),
+    rep_id: repId,
+    date: String(input.date || new Date().toISOString()).slice(0, 10),
+    expense_type: String(input.expense_type || input.expenseType || '').trim(),
+    amount: Number(input.amount || 0),
+    description: String(input.description || '').trim(),
+    attachment_uri: normalizeUpload(input.attachment_uri || input.attachmentUri),
+    status: String(input.status || 'SUBMITTED').trim().toUpperCase(),
+    created_at: input.created_at || input.createdAt || new Date().toISOString(),
+    syncedAt: new Date().toISOString(),
+  };
+};
 
 const cleanSchedule = (input, data) => {
   const repId = String(input.rep_id || input.repId || '').trim();
@@ -277,8 +447,23 @@ const routes = {
     await saveData(data);
     return data.settings;
   },
+  'PUT /api/reference-data': async (data, body) => {
+    data.specializations = normalizeArray(body.specializations).map((item) => String(item).trim()).filter(Boolean);
+    data.degrees = normalizeArray(body.degrees).map((item) => String(item).trim()).filter(Boolean);
+    await saveData(data);
+    return { specializations: data.specializations, degrees: data.degrees };
+  },
+  'POST /api/products': async (data, body) => {
+    const product = { id: nextId(data.products || []), ...cleanProduct(body), created_at: new Date().toISOString() };
+    if (!product.name) return { status: 400, payload: { error: 'Product name is required' } };
+    data.products = data.products || [];
+    data.products.push(product);
+    await saveData(data);
+    return product;
+  },
   'POST /api/doctors': async (data, body) => {
     const doctor = { id: nextId(data.doctors), ...cleanDoctor(body), created_at: new Date().toISOString() };
+    addLocationRequestIfPending(data, doctor, body.requestedBy || body.rep_id);
     data.doctors.push(doctor);
     await saveData(data);
     return doctor;
@@ -289,11 +474,22 @@ const routes = {
     for (const row of rows) {
       const doctor = { id: nextId(data.doctors), ...cleanDoctor(row), created_at: new Date().toISOString() };
       if (!doctor.name) continue;
+      addLocationRequestIfPending(data, doctor, row.requestedBy || row.rep_id);
       data.doctors.push(doctor);
       imported.push(doctor);
     }
     await saveData(data);
     return { imported: imported.length, doctors: imported };
+  },
+  'POST /api/expenses': async (data, body) => {
+    data.expenses = data.expenses || [];
+    const expense = cleanExpense(body, data);
+    if (!expense.rep_id || !expense.expense_type || !expense.amount) {
+      return { status: 400, payload: { error: 'Salesperson, type, and amount are required' } };
+    }
+    data.expenses.push(expense);
+    await saveData(data);
+    return expense;
   },
   'POST /api/reps': async (data, body) => {
     if (data.reps.some((item) => item.email === String(body.email || '').trim().toLowerCase())) {
@@ -318,7 +514,8 @@ const handleDynamicRoute = async (req, res, data, pathname, body) => {
     const index = data.doctors.findIndex((item) => item.id === doctorMatch[1]);
     if (index < 0) return send(req, res, 404, { error: 'Doctor not found' });
     if (req.method === 'PUT') {
-      data.doctors[index] = { ...data.doctors[index], ...cleanDoctor(body), updated_at: new Date().toISOString() };
+      data.doctors[index] = { ...data.doctors[index], ...cleanDoctor(body, data.doctors[index]), updated_at: new Date().toISOString() };
+      addLocationRequestIfPending(data, data.doctors[index], body.requestedBy || body.rep_id);
       await saveData(data);
       return send(req, res, 200, data.doctors[index]);
     }
@@ -327,6 +524,80 @@ const handleDynamicRoute = async (req, res, data, pathname, body) => {
       await saveData(data);
       return send(req, res, 200, data.doctors[index]);
     }
+  }
+
+  const productMatch = pathname.match(/^\/api\/products\/([^/]+)$/);
+  if (productMatch) {
+    data.products = data.products || [];
+    const index = data.products.findIndex((item) => String(item.id) === productMatch[1]);
+    if (index < 0) return send(req, res, 404, { error: 'Product not found' });
+    if (req.method === 'PUT') {
+      data.products[index] = { ...data.products[index], ...cleanProduct(body), updated_at: new Date().toISOString() };
+      await saveData(data);
+      return send(req, res, 200, data.products[index]);
+    }
+    if (req.method === 'DELETE') {
+      data.products[index] = { ...data.products[index], status: 'INACTIVE', updated_at: new Date().toISOString() };
+      await saveData(data);
+      return send(req, res, 200, data.products[index]);
+    }
+  }
+
+  const locationDecisionMatch = pathname.match(/^\/api\/doctor-location-requests\/([^/]+)\/(approve|reject)$/);
+  if (locationDecisionMatch && req.method === 'POST') {
+    data.doctorLocationRequests = data.doctorLocationRequests || [];
+    const index = data.doctorLocationRequests.findIndex((item) => String(item.id) === locationDecisionMatch[1]);
+    if (index < 0) return send(req, res, 404, { error: 'Doctor location request not found' });
+    const request = data.doctorLocationRequests[index];
+    const status = locationDecisionMatch[2] === 'approve' ? 'APPROVED' : 'REJECTED';
+    data.doctorLocationRequests[index] = {
+      ...request,
+      status,
+      reviewedAt: new Date().toISOString(),
+      reviewedBy: String(body.managerId || body.adminId || ''),
+      rejectionReason: status === 'REJECTED' ? String(body.reason || '') : '',
+    };
+    const doctorIndex = data.doctors.findIndex((doctor) => String(doctor.id) === String(request.doctorId));
+    if (doctorIndex >= 0) {
+      if (status === 'APPROVED') {
+        data.doctors[doctorIndex] = {
+          ...data.doctors[doctorIndex],
+          approvedLatitude: Number(request.latitude),
+          approvedLongitude: Number(request.longitude),
+          latitude: Number(request.latitude),
+          longitude: Number(request.longitude),
+          pendingLatitude: null,
+          pendingLongitude: null,
+          locationApprovalStatus: 'APPROVED',
+          updated_at: new Date().toISOString(),
+        };
+      } else {
+        data.doctors[doctorIndex] = {
+          ...data.doctors[doctorIndex],
+          pendingLatitude: null,
+          pendingLongitude: null,
+          locationApprovalStatus: 'REJECTED',
+          updated_at: new Date().toISOString(),
+        };
+      }
+    }
+    await saveData(data);
+    return send(req, res, 200, data.doctorLocationRequests[index]);
+  }
+
+  const expenseDecisionMatch = pathname.match(/^\/api\/expenses\/([^/]+)\/(approve|reject)$/);
+  if (expenseDecisionMatch && req.method === 'POST') {
+    data.expenses = data.expenses || [];
+    const index = data.expenses.findIndex((item) => String(item.id) === expenseDecisionMatch[1]);
+    if (index < 0) return send(req, res, 404, { error: 'Expense not found' });
+    data.expenses[index] = {
+      ...data.expenses[index],
+      status: expenseDecisionMatch[2] === 'approve' ? 'APPROVED' : 'REJECTED',
+      reviewedAt: new Date().toISOString(),
+      reviewedBy: String(body.managerId || body.adminId || ''),
+    };
+    await saveData(data);
+    return send(req, res, 200, data.expenses[index]);
   }
 
   const repMatch = pathname.match(/^\/api\/reps\/([^/]+)$/);
@@ -428,13 +699,26 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/sync/bootstrap') {
       const repId = url.searchParams.get('repId');
       const rep = data.reps.find((item) => item.id === repId) || null;
+      const visibleDoctorIds = new Set(
+        data.doctors
+          .filter((doctor) => doctor.is_active !== 0 && (!repId || String(doctor.assignedRepId || '') === String(repId)))
+          .map((doctor) => String(doctor.id)),
+      );
       return send(req, res, 200, {
         branding: data.branding,
         settings: data.settings,
-        doctors: data.doctors.filter((doctor) => doctor.is_active !== 0),
+        products: data.products || [],
+        specializations: data.specializations || [],
+        degrees: data.degrees || [],
+        doctors: data.doctors.filter((doctor) => doctor.is_active !== 0 && visibleDoctorIds.has(String(doctor.id))),
         reps: data.reps.filter((item) => item.status !== 'INACTIVE').map(stripSensitiveRep),
         schedules: (data.schedules || []).filter((schedule) => String(schedule.rep_id) === String(repId)),
         leaves: (data.leaves || []).filter((leave) => String(leave.rep_id) === String(repId)),
+        expenses: (data.expenses || []).filter((expense) => String(expense.rep_id) === String(repId)),
+        visits: (data.visits || []).filter((visit) => String(visit.rep_id) === String(repId)),
+        doctorLocationRequests: (data.doctorLocationRequests || []).filter(
+          (request) => String(request.repId || '') === String(repId) || visibleDoctorIds.has(String(request.doctorId)),
+        ),
         currentRep: rep ? stripSensitiveRep(rep) : null,
       });
     }
@@ -444,21 +728,47 @@ const server = http.createServer(async (req, res) => {
       if (req.headers.authorization && !tokenRepId) {
         return send(req, res, 401, { error: 'Invalid sync token' });
       }
-      upsertRows(data.attendance, body.attendance, (row) => `${row.rep_id || row.repId}:${row.date}:${row.id}`);
-      upsertRows(data.visits, body.visits, (row) => `${row.rep_id || row.repId}:${row.id}`);
+      upsertRows(data.attendance, (body.attendance || []).map((row) => ({
+        ...row,
+        check_in_type: row.check_in_type || row.checkInType || inferCheckInType(row),
+        photo_uri: normalizeUpload(row.photo_uri || row.photoUri),
+      })), (row) => `${row.rep_id || row.repId}:${row.date}:${row.check_in_type || 'MORNING'}:${row.id}`);
+      upsertRows(data.visits, (body.visits || []).map((row) => {
+        const productIds = normalizeProductIds(row.product_ids || row.productIds);
+        const productNames = productIds
+          .map((id) => (data.products || []).find((product) => String(product.id) === String(id))?.name)
+          .filter(Boolean);
+        return {
+          ...row,
+          product_ids: productIds,
+          product_names: normalizeProductNames(row.product_names || row.productNames).length
+            ? normalizeProductNames(row.product_names || row.productNames)
+            : productNames,
+          photo_uri: normalizeUpload(row.photo_uri || row.photoUri),
+        };
+      }), (row) => `${row.rep_id || row.repId}:${row.id}`);
       for (const row of body.doctors || []) {
         const existingIndex = data.doctors.findIndex(
           (item) => String(item.id) === String(row.portal_id || row.id),
         );
+        const existing = existingIndex >= 0 ? data.doctors[existingIndex] : {};
         const doctor = {
           id: existingIndex >= 0 ? data.doctors[existingIndex].id : nextId(data.doctors),
-          ...cleanDoctor(row),
+          ...cleanDoctor({ ...row, assignedRepId: row.assignedRepId || row.assigned_rep_id || row.rep_id || tokenRepId }, existing),
           created_at: row.created_at || new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };
         if (!doctor.name) continue;
+        addLocationRequestIfPending(data, doctor, row.rep_id || tokenRepId);
         if (existingIndex >= 0) data.doctors[existingIndex] = { ...data.doctors[existingIndex], ...doctor };
         else data.doctors.push(doctor);
+      }
+      data.expenses = data.expenses || [];
+      for (const row of body.expenses || []) {
+        const expense = cleanExpense(row, data);
+        const index = data.expenses.findIndex((item) => String(item.id) === String(expense.id) && String(item.rep_id) === String(expense.rep_id));
+        if (index >= 0) data.expenses[index] = { ...data.expenses[index], ...expense };
+        else data.expenses.push(expense);
       }
       data.schedules = data.schedules || [];
       for (const row of body.schedules || []) {
@@ -486,6 +796,7 @@ const server = http.createServer(async (req, res) => {
         schedules: data.schedules.length,
         doctors: data.doctors.length,
         leaves: data.leaves.length,
+        expenses: data.expenses.length,
       });
     }
 

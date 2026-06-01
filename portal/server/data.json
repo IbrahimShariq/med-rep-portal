@@ -6,6 +6,9 @@
     "logoUrl": ""
   },
   "settings": {
+    "require_attendance_photo": "false",
+    "max_upload_size_mb": "5",
+    "supported_upload_formats": "image/jpeg,image/png,image/webp",
     "attendance_radius_meters": "300",
     "visit_proximity_warning_meters": "200",
     "teleport_max_speed_kmh": "120",
@@ -42,7 +45,19 @@
       "phone": "0300-1234567",
       "notes": "Morning visits preferred",
       "is_active": 1,
-      "created_at": "2026-05-11T00:00:00.000Z"
+      "created_at": "2026-05-11T00:00:00.000Z",
+      "assignedRepId": "1",
+      "additionalDegree": "",
+      "productIds": [
+        "4"
+      ],
+      "approvedLatitude": 33.7104,
+      "approvedLongitude": 73.0567,
+      "pendingLatitude": null,
+      "pendingLongitude": null,
+      "locationApprovalStatus": "APPROVED",
+      "photoUri": "",
+      "updated_at": "2026-06-01T05:33:44.189Z"
     },
     {
       "id": "2",
@@ -57,7 +72,16 @@
       "phone": "0321-7654321",
       "notes": "Clinic is on main markaz road",
       "is_active": 1,
-      "created_at": "2026-05-11T00:00:00.000Z"
+      "created_at": "2026-05-11T00:00:00.000Z",
+      "assignedRepId": "1",
+      "additionalDegree": "",
+      "productIds": [],
+      "approvedLatitude": 33.6934,
+      "approvedLongitude": 73.0126,
+      "pendingLatitude": null,
+      "pendingLongitude": null,
+      "locationApprovalStatus": "APPROVED",
+      "photoUri": ""
     },
     {
       "id": "3",
@@ -72,11 +96,60 @@
       "phone": "0333-1112223",
       "notes": "High prescription potential",
       "is_active": 1,
-      "created_at": "2026-05-11T00:00:00.000Z"
+      "created_at": "2026-05-11T00:00:00.000Z",
+      "assignedRepId": "1",
+      "additionalDegree": "",
+      "productIds": [],
+      "approvedLatitude": 33.5244,
+      "approvedLongitude": 73.1511,
+      "pendingLatitude": null,
+      "pendingLongitude": null,
+      "locationApprovalStatus": "APPROVED",
+      "photoUri": ""
     }
   ],
   "attendance": [],
   "visits": [],
   "schedules": [],
-  "leaves": []
+  "leaves": [],
+  "products": [
+    {
+      "id": "1",
+      "name": "Panadol",
+      "description": "Paracetamol for pain relief",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "2",
+      "name": "Amoxicillin",
+      "description": "Antibiotic for bacterial infections",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "3",
+      "name": "Loratadine",
+      "description": "Antihistamine for allergies",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "4",
+      "name": "Metformin",
+      "description": "For blood sugar management",
+      "status": "ACTIVE"
+    }
+  ],
+  "expenses": [],
+  "doctorLocationRequests": [],
+  "specializations": [
+    "Cardiologist",
+    "Dermatologist",
+    "General Physician",
+    "Pediatrician"
+  ],
+  "degrees": [
+    "MBBS",
+    "FCPS",
+    "DDerm",
+    "MD"
+  ]
 }
